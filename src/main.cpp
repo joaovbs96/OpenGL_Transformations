@@ -1,6 +1,8 @@
 
 #include <iostream>
 #include "glm/glm.hpp"
+#include "glm/gtc/matrix_access.hpp"
+#include "glm/gtc/matrix_transform.hpp"
 
 // MO814 - Topics in Computer Graphics
 // João Vítor Buscatto Silva - RA 155951
@@ -19,10 +21,6 @@
 // https://open.gl/transformations
 // http://www.opengl-tutorial.org/beginners-tutorials/tutorial-3-matrices/
 
-// Creating 3D Shapes:
-// 1° - Create shapes with unit dimensions in the origin
-// 2° - Translate them to other positions of the screen
-
 #include <GL/glew.h>     // interact with OpenGL
 #include <GLFW/glfw3.h>  // create windows
 
@@ -30,10 +28,15 @@
 const GLchar* vertexSource = R"glsl(
   #version 400
 
-  in vec3 position; 
+  // Input vertex data, different for all executions of this shader.
+  layout(location = 0) in vec3 position;
+
+  // Values that stay constant for the whole mesh.
+  uniform mat4 MVP;
 
   void main() { 
-    gl_Position = vec4(position, 1.0); 
+    // Output position of the vertex, in clip space : MVP * position
+    gl_Position = MVP * vec4(position, 1.0); 
   }
 )glsl";
 
@@ -49,6 +52,7 @@ const GLchar* fragmentSource = R"glsl(
 )glsl";
 
 int main() {
+  int width = 600, height = 600;
   GLFWwindow* window;  // created window
 
   // initiate glfw
@@ -58,7 +62,7 @@ int main() {
   }
 
   // check if window was created
-  window = glfwCreateWindow(600, 600, "A window", nullptr, nullptr);
+  window = glfwCreateWindow(width, height, "A window", nullptr, nullptr);
   if (window == nullptr) {
     std::cerr << "GLFW failed to create window." << std::endl;
     return -1;
@@ -118,7 +122,59 @@ int main() {
   glEnableVertexAttribArray(posAttrib);
   glVertexAttribPointer(posAttrib, 3, GL_FLOAT, GL_FALSE, 0, 0);
 
+  // view matrix parameters
+  glm::vec3 camPos(0.0f, 0.f, -3.0f);
+  glm::vec3 camTarget(0.0f, 0.0f, 0.0f);
+  glm::vec3 up(0.0f, 1.0f, 0.0f);
+
+  // perspective matrix parameters
+  float aspect = float(width) / float(height);
+  float fov = glm::radians(45.0f);
+  float near = 0.1f;
+  float far = 100.f;
+
+  // get MVP matrix handle
+  GLuint matrixId = glGetUniformLocation(shaderProgram, "MVP");
+
+  bool moveCamera = true;
+
   while (glfwWindowShouldClose(window) == 0) {
+    // user input
+
+    // check if camera can be moved
+    if (glfwGetKey(window, GLFW_KEY_C) == GLFW_PRESS) {
+      moveCamera = !moveCamera;
+    }
+
+    // camera movement
+    if (moveCamera) {
+      const float cameraSpeed = 0.05f;
+      const glm::vec3 camFront(0.0f, 0.0f, -1.0f);
+
+      if (glfwGetKey(window, GLFW_KEY_UP) == GLFW_PRESS) {
+        camPos += cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+        camTarget += cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+      }
+      if (glfwGetKey(window, GLFW_KEY_DOWN) == GLFW_PRESS) {
+        camPos -= cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+        camTarget -= cameraSpeed * glm::vec3(0.0f, 1.0f, 0.0f);
+      }
+      if (glfwGetKey(window, GLFW_KEY_LEFT) == GLFW_PRESS) {
+        camPos += cameraSpeed * glm::vec3(1.0f, 0.0f, 0.0f);
+        camTarget += cameraSpeed * glm::vec3(1.0f, 0.0f, 0.0f);
+      }
+      if (glfwGetKey(window, GLFW_KEY_RIGHT) == GLFW_PRESS) {
+        camPos -= cameraSpeed * glm::vec3(1.0f, 0.0f, 0.0f);
+        camTarget -= cameraSpeed * glm::vec3(1.0f, 0.0f, 0.0f);
+      }
+    }
+
+    glm::mat4 model = glm::mat4(1.0f);  // identity
+    glm::mat4 view = glm::lookAt(camPos, camTarget, up);
+    glm::mat4 perspective = glm::perspective(fov, aspect, near, far);
+    glm::mat4 mvp = perspective * view * model;  // P * V * M
+    glUniformMatrix4fv(matrixId, 1, GL_FALSE, &mvp[0][0]);
+
     // clear the window
     glClearColor(0.0f, 0.0f, 76.f / 255.f, 1.0f);  // backgroung color
     glClear(GL_COLOR_BUFFER_BIT);
